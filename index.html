@@ -105,8 +105,8 @@
     <!-- 우측: 규정 입력 -->
     <div class="card">
       <h2>② 검토할 부서 규정 입력</h2>
-      <label for="fileInput">파일 업로드 (.docx / .txt) — 선택사항</label>
-      <input type="file" id="fileInput" accept=".docx,.txt">
+      <label for="fileInput">파일 업로드 (.docx / .doc / .rtf / .txt) — 선택사항</label>
+      <input type="file" id="fileInput" accept=".docx,.doc,.rtf,.txt">
       <div class="footer-note" id="fileMsg"></div>
 
       <label for="regText">또는 직접 붙여넣기</label>
@@ -175,17 +175,150 @@ function escapeHtml(s){
   return (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 }
 
-// ---------- 파일 업로드 ----------
+// ---------- RTF(.doc/.rtf) 텍스트 추출 ----------
+// 한글(HWP)에서 "Word 문서(*.doc)"로 저장 시 실제로는 RTF 포맷으로 저장되는 경우가 많음.
+// 컨트롤 워드/그룹을 제거하고, \'XX 16진 이스케이프(EUC-KR 바이트)를 모아 디코딩한다.
+function rtfToText(rtf){
+  const skipDestinations = new Set([
+    'fonttbl','colortbl','stylesheet','info','generator','pict','object',
+    'header','footer','headerf','footerf','footerl','footerr','headerl','headerr',
+    'themedata','colorschememapping','datastore','xmlnstbl','listtable','listoverridetable',
+    'rsidtbl','latentstyles','fldinst','nonshppict','shp','shpinst','bkmkstart','bkmkend'
+  ]);
+
+  const bytes = [];       // 최종 디코딩할 바이트 스트림
+  let i = 0;
+  const n = rtf.length;
+  const groupStack = [];  // 각 그룹이 skip 대상인지 여부 스택
+  let skipDepth = 0;      // 0보다 크면 현재 skip 중인 destination group 내부
+
+  function pushByte(code){ bytes.push(code & 0xff); }
+  function pushAscii(str){ for(const ch of str) pushByte(ch.charCodeAt(0)); }
+
+  while(i < n){
+    const ch = rtf[i];
+
+    if(ch === '{'){
+      groupStack.push(skipDepth > 0 ? 'skip' : 'normal');
+      i++;
+      continue;
+    }
+    if(ch === '}'){
+      const top = groupStack.pop();
+      if(top === 'skip' && skipDepth > 0) skipDepth--;
+      i++;
+      continue;
+    }
+    if(ch === '\\'){
+      // 컨트롤 심볼/워드 파싱
+      i++;
+      if(i >= n) break;
+      const c1 = rtf[i];
+
+      // \'XX 16진 이스케이프
+      if(c1 === "'"){
+        const hex = rtf.substr(i+1, 2);
+        i += 3;
+        const val = parseInt(hex, 16);
+        if(!isNaN(val) && skipDepth === 0) pushByte(val);
+        continue;
+      }
+      // \* (ignorable destination marker) - 다음 컨트롤 워드가 skip 대상인지는 아래에서 처리
+      if(c1 === '*'){
+        i++;
+        continue;
+      }
+      // 이스케이프된 특수문자
+      if(c1 === '\\' || c1 === '{' || c1 === '}'){
+        if(skipDepth === 0) pushByte(c1.charCodeAt(0));
+        i++;
+        continue;
+      }
+      // 개행 관련 컨트롤 워드
+      if(/[a-zA-Z]/.test(c1)){
+        let start = i;
+        while(i < n && /[a-zA-Z]/.test(rtf[i])) i++;
+        const word = rtf.substring(start, i);
+        // 숫자 파라미터
+        let numStart = i;
+        if(rtf[i] === '-'){ i++; }
+        while(i < n && /[0-9]/.test(rtf[i])) i++;
+        // 파라미터 뒤 공백 1개는 구분자로 소비
+        if(rtf[i] === ' ') i++;
+
+        if(skipDestinations.has(word)){
+          // 현재 그룹을 skip 상태로 표시
+          if(groupStack.length > 0) groupStack[groupStack.length-1] = 'skip';
+          skipDepth++;
+        } else if(skipDepth === 0){
+          if(word === 'par' || word === 'line' || word === 'row'){
+            pushAscii('\n');
+          } else if(word === 'tab' || word === 'cell'){
+            pushAscii('\t');
+          } else if(word === 'u'){
+            // 유니코드 이스케이프 \uNNNN (10진수, 음수 가능) - 뒤에 대체문자 1개가 따라오는 경우가 많음
+            const m = rtf.substring(numStart).match(/^-?\d+/);
+            if(m){
+              const code = parseInt(m[0], 10);
+              const uni = code < 0 ? 65536 + code : code;
+              try{ pushAsciiUnicode(uni); }catch(e){}
+            }
+          }
+        }
+        continue;
+      }
+      // 그 외 컨트롤 심볼(\~ \_ \- 등)은 무시
+      i++;
+      continue;
+    }
+
+    // 일반 텍스트 문자
+    if(skipDepth === 0){
+      pushByte(ch.charCodeAt(0));
+    }
+    i++;
+  }
+
+  function pushAsciiUnicode(code){
+    // 유니코드 코드포인트를 UTF-8 바이트로 변환해 스트림에 추가 (드물게 사용됨)
+    const s = String.fromCodePoint(code);
+    const utf8 = new TextEncoder().encode(s);
+    for(const b of utf8) bytes.push(b);
+  }
+
+  const byteArray = new Uint8Array(bytes);
+  let text;
+  try{
+    text = new TextDecoder('euc-kr').decode(byteArray);
+  } catch(e){
+    text = new TextDecoder('utf-8').decode(byteArray);
+  }
+  // 과도한 빈 줄 정리
+  return text.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+
 document.getElementById('fileInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if(!file) return;
   const fileMsg = document.getElementById('fileMsg');
   fileMsg.textContent = '읽는 중...';
   try{
-    if(file.name.toLowerCase().endsWith('.docx')){
+    const lower = file.name.toLowerCase();
+    if(lower.endsWith('.docx')){
       const arrayBuffer = await file.arrayBuffer();
       const result = await mammoth.extractRawText({arrayBuffer});
       document.getElementById('regText').value = result.value;
+    } else if(lower.endsWith('.doc') || lower.endsWith('.rtf')){
+      const raw = await file.text();
+      if(raw.trim().startsWith('{\\rtf')){
+        // 실제 RTF 포맷 (한글에서 Word 문서로 저장 시 흔함)
+        document.getElementById('regText').value = rtfToText(raw);
+      } else {
+        // 드물게 진짜 옛 바이너리 .doc(97) 형식 - 지원 불가, 안내
+        fileMsg.textContent = '⚠️ 이 .doc 파일은 RTF가 아닌 옛 바이너리 형식으로 보입니다. 한글에서 "텍스트 문서(*.txt)"로 다시 저장해주세요.';
+        return;
+      }
     } else {
       const text = await file.text();
       document.getElementById('regText').value = text;
@@ -195,6 +328,7 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
     fileMsg.textContent = '파일 읽기 실패: ' + err.message;
   }
 });
+
 
 document.getElementById('clearBtn').addEventListener('click', () => {
   document.getElementById('regText').value = '';
@@ -208,7 +342,7 @@ document.getElementById('clearBtn').addEventListener('click', () => {
 const MODEL_NAME = 'claude-3-5-haiku-20241022';
 
 document.getElementById('analyzeBtn').addEventListener('click', async () => {
-  const regText = document.getElementById('regText').value.trim();
+  let regText = document.getElementById('regText').value.trim();
   const resultArea = document.getElementById('resultArea');
 
   if(!currentStandard){
@@ -219,6 +353,13 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     resultArea.innerHTML = '<div class="empty">검토할 규정 내용을 입력해주세요.</div>';
     return;
   }
+  const MAX_LEN = 15000;
+  let truncNotice = '';
+  if(regText.length > MAX_LEN){
+    regText = regText.slice(0, MAX_LEN);
+    truncNotice = `<div class="footer-note" style="margin-bottom:10px;">⚠️ 규정 내용이 길어 앞부분 ${MAX_LEN.toLocaleString()}자만 분석했습니다.</div>`;
+  }
+
 
   resultArea.innerHTML = `<div class="loading"><div class="spinner"></div> AI가 규정을 대조 분석하는 중입니다...</div>`;
   document.getElementById('analyzeBtn').disabled = true;
@@ -279,7 +420,7 @@ ${regText}
       return;
     }
 
-    renderResults(checkpoints);
+    renderResults(checkpoints, truncNotice);
 
   } catch(err){
     resultArea.innerHTML = `<div class="empty">분석 실패: ${escapeHtml(err.message)}<br>API 키 설정 또는 모델명을 확인해주세요.</div>`;
@@ -288,12 +429,13 @@ ${regText}
   }
 });
 
-function renderResults(checkpoints){
+function renderResults(checkpoints, truncNotice){
   const resultArea = document.getElementById('resultArea');
   const okCount = checkpoints.filter(c => c.status === '있음').length;
   const noCount = checkpoints.filter(c => c.status === '없음').length;
 
-  let html = `<div class="result-summary">
+  let html = truncNotice || '';
+  html += `<div class="result-summary">
     <div class="pill ok">✅ 포함 ${okCount}건</div>
     <div class="pill no">❌ 누락 ${noCount}건</div>
     <button class="btn secondary" id="copyBtn" style="margin-left:auto;padding:6px 14px;font-size:12.5px;">결과 복사</button>
