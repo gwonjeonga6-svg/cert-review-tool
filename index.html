@@ -111,6 +111,7 @@
 
       <label for="regText">또는 직접 붙여넣기</label>
       <textarea id="regText" placeholder="검토할 부서 규정(지침) 내용을 붙여넣으세요..."></textarea>
+      <div class="footer-note">💡 API 사용량 한도 때문에 약 18,000자(A4 기준 8~9페이지 분량)까지만 분석돼요. 규정 전체가 길다면, 해당 조사기준과 관련된 조항 위주로 잘라서 넣으시면 더 정확해요.</div>
 
       <div class="btn-row">
         <button class="btn" id="analyzeBtn">🔍 AI 대조 분석</button>
@@ -371,7 +372,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     resultArea.innerHTML = '<div class="empty">검토할 규정 내용을 입력해주세요.</div>';
     return;
   }
-  const MAX_LEN = 50000;
+  const MAX_LEN = 18000;
   let truncNotice = '';
   if(regText.length > MAX_LEN){
     regText = regText.slice(0, MAX_LEN);
@@ -425,7 +426,7 @@ ${regText}
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         model: MODEL_NAME,
-        max_tokens: 3000,
+        max_tokens: 1500,
         temperature: 0.2,
         messages: [{role: 'user', content: prompt}]
       })
