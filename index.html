@@ -298,6 +298,21 @@ function rtfToText(rtf){
 }
 
 
+// 텍스트 파일 인코딩 자동 감지: UTF-8로 먼저 읽고, 깨진 문자(�)가 많으면 EUC-KR로 재시도
+async function readTextSmart(file){
+  const buf = await file.arrayBuffer();
+  const utf8Text = new TextDecoder('utf-8').decode(buf);
+  const brokenCount = (utf8Text.match(/\uFFFD/g) || []).length;
+  if(brokenCount > 3){
+    try{
+      return new TextDecoder('euc-kr').decode(buf);
+    } catch(e){
+      return utf8Text;
+    }
+  }
+  return utf8Text;
+}
+
 document.getElementById('fileInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if(!file) return;
@@ -310,7 +325,7 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
       const result = await mammoth.extractRawText({arrayBuffer});
       document.getElementById('regText').value = result.value;
     } else if(lower.endsWith('.doc') || lower.endsWith('.rtf')){
-      const raw = await file.text();
+      const raw = await readTextSmart(file);
       if(raw.trim().startsWith('{\\rtf')){
         // 실제 RTF 포맷 (한글에서 Word 문서로 저장 시 흔함)
         document.getElementById('regText').value = rtfToText(raw);
@@ -320,7 +335,7 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
         return;
       }
     } else {
-      const text = await file.text();
+      const text = await readTextSmart(file);
       document.getElementById('regText').value = text;
     }
     fileMsg.textContent = `✅ "${file.name}" 불러오기 완료`;
@@ -338,8 +353,8 @@ document.getElementById('clearBtn').addEventListener('click', () => {
 });
 
 // ---------- AI 대조 분석 ----------
-// ⚠️ 아래 모델명은 예시입니다. 기존에 다른 앱(지표대시보드 등)에서 실제 작동 확인한 모델명으로 바꿔주세요.
-const MODEL_NAME = 'claude-3-5-haiku-20241022';
+// ⚠️ 필요 시 다른 앱에서 실제로 쓰신 Groq 모델명으로 바꿔주세요.
+const MODEL_NAME = 'llama-3.3-70b-versatile';
 
 document.getElementById('analyzeBtn').addEventListener('click', async () => {
   let regText = document.getElementById('regText').value.trim();
@@ -408,7 +423,7 @@ ${regText}
       throw new Error(data.error.message || JSON.stringify(data.error));
     }
 
-    let text = data.content?.map(b => b.text || '').join('') || '';
+    let text = data.choices?.[0]?.message?.content || '';
     text = text.replace(/```json|```/g, '').trim();
 
     let checkpoints;
