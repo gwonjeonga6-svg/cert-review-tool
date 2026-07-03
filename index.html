@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>인증기준 규정 검토 도구</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<style>
+  :root{
+    --navy:#1c3d5a; --navy-dark:#122a3f; --accent:#2e7d5b;
+    --red:#c0392b; --bg:#f4f6f8; --card:#ffffff; --border:#dfe4e8;
+    --text:#2b2f33; --muted:#707880;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Nanum Gothic','맑은 고딕',sans-serif;
+    background:var(--bg); color:var(--text); line-height:1.6;
+  }
+  header{
+    background:var(--navy); color:#fff; padding:18px 24px;
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;
+  }
+  header h1{font-size:19px; margin:0; font-weight:800;}
+  header .sub{font-size:12.5px; color:#c9d6e0;}
+  .container{max-width:1200px; margin:0 auto; padding:20px;}
+  .grid{display:grid; grid-template-columns: 1fr 1fr; gap:18px;}
+  @media (max-width: 900px){ .grid{grid-template-columns:1fr;} }
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:18px; margin-bottom:18px;
+  }
+  .card h2{font-size:15.5px; margin:0 0 12px; color:var(--navy); font-weight:800;
+    border-bottom:2px solid var(--navy); padding-bottom:8px;}
+  label{display:block; font-size:13px; font-weight:700; margin:10px 0 5px; color:var(--navy-dark);}
+  select, textarea, input[type=file]{
+    width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:6px;
+    font-family:inherit; font-size:13.5px; background:#fff; color:var(--text);
+  }
+  textarea{resize:vertical; min-height:180px;}
+  .ref-box{
+    background:#f8fafb; border:1px solid var(--border); border-radius:8px;
+    padding:12px 14px; font-size:13px; white-space:pre-wrap; max-height:260px; overflow-y:auto;
+    margin-top:10px; color:#3a4046;
+  }
+  .ref-box b{color:var(--navy);}
+  .tag{display:inline-block; font-size:11px; font-weight:700; background:var(--navy); color:#fff;
+    padding:2px 8px; border-radius:10px; margin-right:6px;}
+  .btn{
+    display:inline-block; background:var(--navy); color:#fff; border:none; border-radius:6px;
+    padding:11px 18px; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit;
+  }
+  .btn:hover{background:var(--navy-dark);}
+  .btn:disabled{background:#9aa5ad; cursor:not-allowed;}
+  .btn.secondary{background:#fff; color:var(--navy); border:1px solid var(--navy);}
+  .btn-row{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;}
+  .result-summary{display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
+  .pill{padding:8px 14px; border-radius:8px; font-size:13px; font-weight:700;}
+  .pill.ok{background:#e6f4ec; color:var(--accent);}
+  .pill.no{background:#fbe9e7; color:var(--red);}
+  .check-item{border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:12px;}
+  .check-item.ok{border-left:5px solid var(--accent);}
+  .check-item.no{border-left:5px solid var(--red);}
+  .check-head{display:flex; align-items:flex-start; gap:8px; font-weight:700; font-size:14px;}
+  .check-status{font-size:13px; font-weight:800; white-space:nowrap;}
+  .check-status.ok{color:var(--accent);}
+  .check-status.no{color:var(--red);}
+  .check-detail{font-size:13px; color:var(--muted); margin-top:8px; padding-left:2px;}
+  .check-detail .quote{background:#f2f6f4; border-left:3px solid var(--accent); padding:6px 10px; margin-top:6px; border-radius:4px;}
+  .check-detail .suggest{background:#fdf3f2; border-left:3px solid var(--red); padding:6px 10px; margin-top:6px; border-radius:4px;}
+  .loading{display:flex; align-items:center; gap:10px; color:var(--muted); font-size:13.5px;}
+  .spinner{width:16px; height:16px; border:2.5px solid #d5dbe0; border-top-color:var(--navy); border-radius:50%; animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .empty{color:var(--muted); font-size:13px; padding:20px; text-align:center;}
+  .footer-note{font-size:12px; color:var(--muted); margin-top:6px;}
+  #copyMsg{font-size:12.5px; color:var(--accent); margin-left:10px; display:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>인증기준 규정 검토 도구</h1>
+    <div class="sub">4주기 표준지침서 기반 · 부서 규정 대조 분석</div>
+  </div>
+  <div class="sub">좋은삼선병원 QPS팀</div>
+</header>
+
+<div class="container">
+  <div class="grid">
+
+    <!-- 좌측: 기준 선택 -->
+    <div class="card">
+      <h2>① 인증기준 선택</h2>
+      <label for="chapterSelect">챕터</label>
+      <select id="chapterSelect"></select>
+
+      <label for="standardSelect">조사기준</label>
+      <select id="standardSelect"></select>
+
+      <div id="refBox" class="ref-box">기준을 선택하면 조사목적 · 조사항목 · 기준의 이해 내용이 여기 표시됩니다.</div>
+    </div>
+
+    <!-- 우측: 규정 입력 -->
+    <div class="card">
+      <h2>② 검토할 부서 규정 입력</h2>
+      <label for="fileInput">파일 업로드 (.docx / .txt) — 선택사항</label>
+      <input type="file" id="fileInput" accept=".docx,.txt">
+      <div class="footer-note" id="fileMsg"></div>
+
+      <label for="regText">또는 직접 붙여넣기</label>
+      <textarea id="regText" placeholder="검토할 부서 규정(지침) 내용을 붙여넣으세요..."></textarea>
+
+      <div class="btn-row">
+        <button class="btn" id="analyzeBtn">🔍 AI 대조 분석</button>
+        <button class="btn secondary" id="clearBtn">지우기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 결과 -->
+  <div class="card">
+    <h2>③ 대조 분석 결과</h2>
+    <div id="resultArea">
+      <div class="empty">기준과 규정을 입력한 후 [AI 대조 분석]을 눌러주세요.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+let standardsData = [];
+let currentStandard = null;
+
+// ---------- 데이터 로드 ----------
+fetch('./standards.json')
+  .then(r => r.json())
+  .then(data => {
+    standardsData = data;
+    populateChapters();
+  })
+  .catch(err => {
+    document.getElementById('refBox').textContent = '기준 데이터 로드 실패: ' + err.message;
+  });
+
+function populateChapters(){
+  const chapters = [...new Set(standardsData.map(s => s.chapter))];
+  const chapterSelect = document.getElementById('chapterSelect');
+  chapterSelect.innerHTML = chapters.map(c => `<option value="${c}">${c}</option>`).join('');
+  chapterSelect.addEventListener('change', populateStandards);
+  populateStandards();
+}
+
+function populateStandards(){
+  const chapter = document.getElementById('chapterSelect').value;
+  const list = standardsData.filter(s => s.chapter === chapter);
+  const standardSelect = document.getElementById('standardSelect');
+  standardSelect.innerHTML = list.map(s => `<option value="${s.code}">${s.code}  ${s.title}</option>`).join('');
+  standardSelect.addEventListener('change', showReference);
+  showReference();
+}
+
+function showReference(){
+  const code = document.getElementById('standardSelect').value;
+  currentStandard = standardsData.find(s => s.code === code);
+  if(!currentStandard){ return; }
+  document.getElementById('refBox').innerHTML =
+    `<b>기준 ${currentStandard.code} — ${escapeHtml(currentStandard.title)}</b>\n\n` +
+    `<b>[조사목적]</b>\n${escapeHtml(currentStandard.purpose)}\n\n` +
+    `<b>[조사항목]</b>\n${escapeHtml(currentStandard.items)}\n\n` +
+    `<b>[기준의 이해]</b>\n${escapeHtml(currentStandard.understanding)}`;
+}
+
+function escapeHtml(s){
+  return (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+
+// ---------- 파일 업로드 ----------
+document.getElementById('fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const fileMsg = document.getElementById('fileMsg');
+  fileMsg.textContent = '읽는 중...';
+  try{
+    if(file.name.toLowerCase().endsWith('.docx')){
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({arrayBuffer});
+      document.getElementById('regText').value = result.value;
+    } else {
+      const text = await file.text();
+      document.getElementById('regText').value = text;
+    }
+    fileMsg.textContent = `✅ "${file.name}" 불러오기 완료`;
+  } catch(err){
+    fileMsg.textContent = '파일 읽기 실패: ' + err.message;
+  }
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  document.getElementById('regText').value = '';
+  document.getElementById('fileInput').value = '';
+  document.getElementById('fileMsg').textContent = '';
+  document.getElementById('resultArea').innerHTML = '<div class="empty">기준과 규정을 입력한 후 [AI 대조 분석]을 눌러주세요.</div>';
+});
+
+// ---------- AI 대조 분석 ----------
+// ⚠️ 아래 모델명은 예시입니다. 기존에 다른 앱(지표대시보드 등)에서 실제 작동 확인한 모델명으로 바꿔주세요.
+const MODEL_NAME = 'claude-3-5-haiku-20241022';
+
+document.getElementById('analyzeBtn').addEventListener('click', async () => {
+  const regText = document.getElementById('regText').value.trim();
+  const resultArea = document.getElementById('resultArea');
+
+  if(!currentStandard){
+    resultArea.innerHTML = '<div class="empty">먼저 인증기준을 선택해주세요.</div>';
+    return;
+  }
+  if(!regText){
+    resultArea.innerHTML = '<div class="empty">검토할 규정 내용을 입력해주세요.</div>';
+    return;
+  }
+
+  resultArea.innerHTML = `<div class="loading"><div class="spinner"></div> AI가 규정을 대조 분석하는 중입니다...</div>`;
+  document.getElementById('analyzeBtn').disabled = true;
+
+  const prompt = `당신은 의료기관 인증조사 전문가입니다. 아래 "인증기준 원문"에서 요구하는 필수요소들이 "검토대상 규정" 안에 실제로 포함되어 있는지 하나씩 대조 분석하세요.
+
+[인증기준 코드] ${currentStandard.code} - ${currentStandard.title}
+
+[조사목적]
+${currentStandard.purpose}
+
+[조사항목]
+${currentStandard.items}
+
+[기준의 이해 - 필수요소 상세]
+${currentStandard.understanding}
+
+[검토대상 규정 원문]
+${regText}
+
+지침:
+- "기준의 이해"에 나온 필수요소들을 개별 체크포인트로 나누어 분석하세요.
+- 각 체크포인트마다 규정에 명시적으로 있는지(포함) 없는지(누락) 판단하세요.
+- 있는 경우 규정에서 해당 근거가 되는 문구를 그대로 인용하세요.
+- 없는 경우 어떤 문구를 추가하면 되는지 구체적인 제안 문구를 작성하세요.
+- 반드시 아래 JSON 형식으로만 답변하세요. 다른 설명, 서론, 마크다운 코드블록 없이 순수 JSON 배열만 출력하세요.
+
+[
+  {"checkpoint": "체크포인트 설명", "status": "있음 또는 없음", "quote": "근거 문구 또는 빈 문자열", "suggestion": "제안 문구 또는 빈 문자열"}
+]`;
+
+  try{
+    const response = await fetch('/api/claude.js', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        max_tokens: 2000,
+        messages: [{role: 'user', content: prompt}]
+      })
+    });
+
+    const data = await response.json();
+
+    if(data.error){
+      throw new Error(data.error.message || JSON.stringify(data.error));
+    }
+
+    let text = data.content?.map(b => b.text || '').join('') || '';
+    text = text.replace(/```json|```/g, '').trim();
+
+    let checkpoints;
+    try{
+      checkpoints = JSON.parse(text);
+    } catch(parseErr){
+      resultArea.innerHTML = `<div class="empty">AI 응답을 해석하지 못했습니다. 원문:<br><pre style="white-space:pre-wrap;text-align:left;">${escapeHtml(text)}</pre></div>`;
+      document.getElementById('analyzeBtn').disabled = false;
+      return;
+    }
+
+    renderResults(checkpoints);
+
+  } catch(err){
+    resultArea.innerHTML = `<div class="empty">분석 실패: ${escapeHtml(err.message)}<br>API 키 설정 또는 모델명을 확인해주세요.</div>`;
+  } finally {
+    document.getElementById('analyzeBtn').disabled = false;
+  }
+});
+
+function renderResults(checkpoints){
+  const resultArea = document.getElementById('resultArea');
+  const okCount = checkpoints.filter(c => c.status === '있음').length;
+  const noCount = checkpoints.filter(c => c.status === '없음').length;
+
+  let html = `<div class="result-summary">
+    <div class="pill ok">✅ 포함 ${okCount}건</div>
+    <div class="pill no">❌ 누락 ${noCount}건</div>
+    <button class="btn secondary" id="copyBtn" style="margin-left:auto;padding:6px 14px;font-size:12.5px;">결과 복사</button>
+  </div>`;
+
+  checkpoints.forEach(c => {
+    const isOk = c.status === '있음';
+    html += `<div class="check-item ${isOk?'ok':'no'}">
+      <div class="check-head">
+        <span class="check-status ${isOk?'ok':'no'}">${isOk?'✅ 있음':'❌ 없음'}</span>
+        <span>${escapeHtml(c.checkpoint||'')}</span>
+      </div>`;
+    if(isOk && c.quote){
+      html += `<div class="check-detail"><div class="quote">📌 근거: "${escapeHtml(c.quote)}"</div></div>`;
+    }
+    if(!isOk && c.suggestion){
+      html += `<div class="check-detail"><div class="suggest">✏️ 추가 제안 문구: "${escapeHtml(c.suggestion)}"</div></div>`;
+    }
+    html += `</div>`;
+  });
+
+  resultArea.innerHTML = html;
+
+  document.getElementById('copyBtn').addEventListener('click', () => {
+    let text = `[인증기준 ${currentStandard.code} - ${currentStandard.title}] 규정 대조 결과\n\n`;
+    checkpoints.forEach(c => {
+      text += `${c.status === '있음' ? '✅' : '❌'} ${c.checkpoint}\n`;
+      if(c.status === '있음' && c.quote) text += `   근거: ${c.quote}\n`;
+      if(c.status === '없음' && c.suggestion) text += `   제안: ${c.suggestion}\n`;
+      text += `\n`;
+    });
+    navigator.clipboard.writeText(text);
+    const btn = document.getElementById('copyBtn');
+    const orig = btn.textContent;
+    btn.textContent = '복사됨!';
+    setTimeout(() => btn.textContent = orig, 1500);
+  });
+}
+</script>
+</body>
+</html>
